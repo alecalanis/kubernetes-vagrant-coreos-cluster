@@ -241,8 +241,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
             if USE_KUBE_UI
               kHost.vm.provision :file, :source => File.join(File.dirname(__FILE__), "kube-system.yaml"), :destination => "/home/core/kube-system.yaml"
-              kHost.vm.provision :file, :source => File.join(File.dirname(__FILE__), "plugins/kube-ui/kube-ui-controller.yaml"), :destination => "/home/core/kube-ui-controller.yaml"
-              kHost.vm.provision :file, :source => File.join(File.dirname(__FILE__), "plugins/kube-ui/kube-ui-service.yaml"), :destination => "/home/core/kube-ui-service.yaml"
+              kHost.vm.provision :file, :source => File.join(File.dirname(__FILE__), "plugins/dashboard/dashboard-controller.yaml"), :destination => "/home/core/dashboard-controller.yaml"
+              kHost.vm.provision :file, :source => File.join(File.dirname(__FILE__), "plugins/dashboard/dashboard-service.yaml"), :destination => "/home/core/dashboard-service.yaml"
             end
           end
       end
@@ -272,7 +272,19 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           else
             system "./temp/setup install"
           end
+          
+          # set cluster
+          if OS.windows?
+              run_remote "/opt/bin/kubectl config set-cluster local --server=http://#{MASTER_IP}:8080 --insecure-skip-tls-verify=true"
+              run_remote "/opt/bin/kubectl config set-context local --cluster=local --namespace=default"
+              run_remote "/opt/bin/kubectl config use-context local"
+            else
+              "kubectl config set-cluster local --server=http://#{MASTER_IP}:8080 --insecure-skip-tls-verify=true"
+              "kubectl config set-context local --cluster=local --namespace=default"
+              "kubectl config use-context local"
+            end
 
+          info "Configuring Kubernetes DNS..."
           res, uri.path = nil, '/api/v1/namespaces/kube-system/replicationcontrollers/kube-dns'
           begin
             res = Net::HTTP.get_response(uri)
@@ -283,8 +295,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
               run_remote "/opt/bin/kubectl create -f /home/core/kube-system.yaml"
               run_remote "/opt/bin/kubectl create -f /home/core/dns-controller.yaml"
             else
-              system "KUBERNETES_MASTER=\"http://#{MASTER_IP}:8080\" kubectl create -f kube-system.yaml"
-              system "KUBERNETES_MASTER=\"http://#{MASTER_IP}:8080\" kubectl create -f temp/dns-controller.yaml"
+              system "kubectl create -f kube-system.yaml"
+              system "kubectl create -f temp/dns-controller.yaml"
             end
           end
 
@@ -297,12 +309,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
             if OS.windows?
               run_remote "/opt/bin/kubectl create -f /home/core/dns-service.yaml"
             else
-              system "KUBERNETES_MASTER=\"http://#{MASTER_IP}:8080\" kubectl create -f plugins/dns/dns-service.yaml"
+              system "kubectl create -f plugins/dns/dns-service.yaml"
             end
           end
 
           if USE_KUBE_UI
-            info "Configuring Kubernetes kube-ui..."
+            info "Configuring Kubernetes dashboard..."
             res, uri.path = nil, '/api/v1/namespaces/kube-system'
             begin
               res = Net::HTTP.get_response(uri)
@@ -312,37 +324,37 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
               if OS.windows?
                 run_remote "/opt/bin/kubectl create -f /home/core/kube-system.yaml"
               else
-                system "KUBERNETES_MASTER=\"http://#{MASTER_IP}:8080\" kubectl create -f kube-system.yaml"
+                system "kubectl create -f kube-system.yaml"
               end
             end
 
-            res, uri.path = nil, '/api/v1/namespaces/kube-system/replicationcontrollers/kube-ui-v3'
+            res, uri.path = nil, '/api/v1/namespaces/kube-system/replicationcontrollers/kubernetes-dashboard'
             begin
               res = Net::HTTP.get_response(uri)
             rescue
             end
             if not res.is_a? Net::HTTPSuccess
               if OS.windows?
-                run_remote "/opt/bin/kubectl create -f /home/core/kube-ui-controller.yaml"
+                run_remote "/opt/bin/kubectl create -f /home/core/dashboard-controller.yaml"
               else
-                system "KUBERNETES_MASTER=\"http://#{MASTER_IP}:8080\" kubectl create -f plugins/kube-ui/kube-ui-controller.yaml"
+                system "kubectl create -f plugins/dashboard/dashboard-controller.yaml"
               end
             end
 
-            res, uri.path = nil, '/api/v1/namespaces/kube-system/services/kube-ui'
+            res, uri.path = nil, '/api/v1/namespaces/kube-system/services/kubernetes-dashboard'
             begin
               res = Net::HTTP.get_response(uri)
             rescue
             end
             if not res.is_a? Net::HTTPSuccess
               if OS.windows?
-                run_remote "/opt/bin/kubectl create -f /home/core/kube-ui-service.yaml"
+                run_remote "/opt/bin/kubectl create -f /home/core/dashboard-service.yaml"
               else
-                system "KUBERNETES_MASTER=\"http://#{MASTER_IP}:8080\" kubectl create -f plugins/kube-ui/kube-ui-service.yaml"
+                system "kubectl create -f plugins/dashboard/dashboard-service.yaml"
               end
             end
 
-            info "Kubernetes kube-ui will be available on http://#{MASTER_IP}:8080/ui"
+            info "Kubernetes dashboard will be available at http://#{MASTER_IP}:8080/ui"
           end
 
         end
